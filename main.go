@@ -2,11 +2,14 @@ package main
 
 import (
 	"bytes"
+	vision "cloud.google.com/go/vision/apiv1"
+	"context"
 	"encoding/base64"
 	"html/template"
 	"image"
 	"image/jpeg"
 	_ "image/png" // (2)
+	"io"
 	"log"
 	"net/http"
 )
@@ -74,6 +77,45 @@ func drawImage(w http.ResponseWriter, image image.Image) {
 		log.Printf("Template実行に失敗しました。: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
+}
+
+func detectFaceArea(file io.Reader) ([]image.Rectangle, error) {
+	ctx := context.Background()
+
+	// (9)
+	client, err := vision.NewImageAnnotatorClient(ctx)
+	if err != nil {
+		log.Printf("[Vision API]Clientの作成に失敗しました。: %v", err)
+		return nil, err
+	}
+
+	// (10)
+	img, err := vision.NewImageFromReader(file)
+	if err != nil {
+		log.Printf("[Vision API]Imageの作成に失敗しました。: %v", err)
+		return nil, err
+	}
+
+	// (11)
+	annotations, err := client.DetectFaces(ctx, img, nil, 20)
+	if err != nil {
+		log.Printf("[Vision API]:顔検出に作成に失敗しました。: %v", err)
+		return nil, err
+	}
+
+	var rectangles []image.Rectangle
+	for _, annotation := range annotations {
+		// (12)
+		vertices := annotation.FdBoundingPoly.Vertices
+		rectangle := image.Rect(
+			int(vertices[0].X),
+			int(vertices[0].Y),
+			int(vertices[2].X),
+			int(vertices[2].Y),
+		)
+		rectangles = append(rectangles, rectangle)
+	}
+	return rectangles, nil
 }
 
 // (1)
