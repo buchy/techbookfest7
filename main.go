@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"html/template"
 	"image"
+	"image/draw"
 	"image/jpeg"
 	_ "image/png" // (2)
 	"io"
@@ -58,7 +59,20 @@ func analyzeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	drawImage(w, img)
+	// (15)
+	if _, err := file.Seek(0, io.SeekStart); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	faceAreas, err := detectFaceArea(file)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	maskedImg := maskImage(faceAreas, img)
+
+	drawImage(w, maskedImg)
 }
 
 func drawImage(w http.ResponseWriter, image image.Image) {
@@ -116,6 +130,22 @@ func detectFaceArea(file io.Reader) ([]image.Rectangle, error) {
 		rectangles = append(rectangles, rectangle)
 	}
 	return rectangles, nil
+}
+
+func maskImage(rectangles []image.Rectangle, img image.Image) image.Image {
+
+	// (13)
+	out := image.NewRGBA(img.Bounds())
+	draw.Draw(out, img.Bounds(), img, image.Pt(0, 0), draw.Src)
+	// (14)
+	for _, rectangle := range rectangles {
+		for h := rectangle.Bounds().Min.Y; h < rectangle.Bounds().Max.Y; h++ {
+			for v := rectangle.Bounds().Min.X; v < rectangle.Bounds().Max.X; v++ {
+				out.Set(v, h, image.Black.At(0, 0))
+			}
+		}
+	}
+	return out
 }
 
 // (1)
